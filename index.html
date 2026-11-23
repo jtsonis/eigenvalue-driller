@@ -35,7 +35,7 @@ h2{font-size:15px;margin:0 0 8px}.note{font-size:12.5px;color:var(--mut)}
 
 <div class="card">
 <div class="grid">
-<div><label>N (matrix size, 2–4)<input id="N" type="number" min="2" max="4" value="3"></label></div>
+<div><label>N (matrix size, 2 or more)<input id="N" type="number" min="2" value="3"></label></div>
 <div><label>Max Digit<input id="md" type="number" min="1" max="20" value="10"></label></div>
 <div><label>Lower Bound<input id="lo" type="number" step="0.001" value="1.001"></label></div>
 <div><label>Upper Bound<input id="hi" type="number" step="0.001" value="1.999"></label></div>
@@ -53,7 +53,7 @@ h2{font-size:15px;margin:0 0 8px}.note{font-size:12.5px;color:var(--mut)}
 <button id="go">Start</button><button id="stop" class="alt" disabled>Stop</button>
 <progress id="pg" value="0" max="1"></progress>
 </div>
-<p class="note" style="margin:10px 0 0">Prepare for long searches when the sample size is large.</p>
+<p class="note" style="margin:10px 0 0">Large N or a large max digit can take a very long time. Lower the max digit first. The exact entry sum filter is always applied, even with pruning skipped.</p>
 </div>
 
 <div class="card stats">
@@ -68,9 +68,10 @@ h2{font-size:15px;margin:0 0 8px}.note{font-size:12.5px;color:var(--mut)}
 <div class="card"><h2>Matches (row-major)</h2><pre id="mats">(nothing yet)</pre></div>
 </main>
 
-<script type="text/js-worker" id="w">
+<script>
+function workerMain(post) {
 let c;
-onmessage = e => {
+const handle = e => {
   if (e.data.cfg) {
     c = e.data.cfg; c.vmax = Math.pow(c.hi, c.N) + c.N - 1;
     c.sumSet = c.sums ? new Set(c.sums) : null;
@@ -196,11 +197,31 @@ function run(task) {
   }
   if (c.sumSet) { let s = 0; for (let k = 0; k < N; k++) s += a[k]; if (s > c.sumMax) ok = false; }
   if (ok) search(a, N);
-  postMessage({ vis, inc, waste, evs, mats });
+  post({ vis, inc, waste, evs, mats });
 }
-</script>
+return handle;
+}
 
-<script>
+// Fallback for sandboxes that refuse to start Web Workers: same code, run on the main thread
+// in short time slices so the page stays responsive between tasks.
+class InlineWorker {
+  constructor() {
+    this.q = []; this.dead = false; this.busy = false; this.onmessage = null;
+    this.h = workerMain(m => { if (!this.dead && this.onmessage) this.onmessage({ data: m }); });
+  }
+  postMessage(d) { this.q.push(d); if (!this.busy) { this.busy = true; setTimeout(() => this.slice(), 0); } }
+  slice() {
+    const t = performance.now();
+    while (this.q.length && !this.dead) {
+      this.h({ data: this.q.shift() });
+      if (performance.now() - t > 30) break;
+    }
+    this.busy = false;
+    if (this.q.length && !this.dead) { this.busy = true; setTimeout(() => this.slice(), 0); }
+  }
+  terminate() { this.dead = true; this.q = []; }
+}
+
 const $ = id => document.getElementById(id);
 let workers = [], t0 = 0, timer = null;
 
@@ -225,12 +246,13 @@ $("go").onclick = () => {
     sums = [...set];
   }
   const cfg = {
-    N: Math.min(4, Math.max(2, +$("N").value | 0)), md: Math.max(1, +$("md").value | 0),
+    N: Math.max(2, +$("N").value | 0), md: Math.max(1, +$("md").value | 0),
     lo: +$("lo").value, hi: +$("hi").value, sums,
     skip: $("skip").checked, nab: $("nab").checked, oni: $("oni").checked,
     fcs: $("fcs").checked, np2: $("np2").checked, show: $("show").checked
   };
   const total = Math.pow(cfg.md + 1, cfg.N);
+  if (!Number.isSafeInteger(total)) { alert("(Max Digit + 1)^N is too large to index. Lower N or Max Digit."); return; }
   let next = 0, done = 0, vis = 0, inc = 0, waste = 0, shown = 0;
   const evs = [], lines = [];
   $("pg").max = total; $("pg").value = 0;
@@ -251,9 +273,20 @@ $("go").onclick = () => {
   };
 
   const n = Math.min(navigator.hardwareConcurrency || 4, 16);
-  const src = URL.createObjectURL(new Blob([$("w").textContent], { type: "text/javascript" }));
+  let src = null, inline = false;
+  try {
+    src = URL.createObjectURL(new Blob(
+      ["const h=(" + workerMain.toString() + ")(m=>postMessage(m));onmessage=e=>h(e);"],
+      { type: "text/javascript" }));
+  } catch (err) { inline = true; }
   for (let i = 0; i < n; i++) {
-    const w = new Worker(src);
+    let w = null;
+    if (!inline) { try { w = new Worker(src); } catch (err) { inline = true; } }
+    if (inline) {
+      if (workers.length) break;
+      w = new InlineWorker();
+      $("ev").textContent = "(running… this page can't start Web Workers here, so it is using a single thread; open the file directly in a browser for parallel speed)";
+    }
     w.postMessage({ cfg });
     w.onmessage = e => {
       const r = e.data;
