@@ -1,1 +1,1 @@
-I proofread "main.c" which Claude turned into "Eigenvalue Driller.html" that you can use here!
+I proofread "main.c" which Claude turned into "Eigenvalue Driller.html" that you can use here! https://jtsonis.github.io/eigenvalue-driller/
