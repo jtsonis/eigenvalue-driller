@@ -1,1 +1,1 @@
-This is for finding integral matrices and eigenvalues of graph automorphisms.
+I proofread "main.c" which Claude turned into "Eigenvalue Driller.html" that you can use here!
