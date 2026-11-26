@@ -31,7 +31,7 @@ h2{font-size:15px;margin:0 0 8px}.note{font-size:12.5px;color:var(--mut)}
 <body>
 <main>
 <h1>Eigenvalue Driller</h1>
-<p class="sub">Searches N×N nonnegative integer matrices whose largest eigenvalue magnitude lies in the chosen bounds. Runs entirely in your browser using parallel Web Workers.</p>
+<p class="sub">Searches N×N nonnegative, irreducible integer matrices whose largest eigenvalue magnitude lies in the chosen bounds. Runs entirely in your browser using parallel Web Workers.</p>
 
 <div class="card">
 <div class="grid">
@@ -42,18 +42,16 @@ h2{font-size:15px;margin:0 0 8px}.note{font-size:12.5px;color:var(--mut)}
 <div><label>Exact Entry Sum<input id="es" type="text" placeholder="blank = any"></label></div>
 </div>
 <div class="sw">
-<label><input type="checkbox" id="skip"> Skip all pruning (counting only)</label>
+<label><input type="checkbox" id="skip"> Skip all pruning (SLOW)</label>
 <label><input type="checkbox" id="nab"> No map to a doubled edge alone</label>
 <label><input type="checkbox" id="oni"> Column parity must match</label>
-<label><input type="checkbox" id="fcs"> Final column sums to 3</label>
-<label><input type="checkbox" id="np2"> Entries sum to N + 2</label>
 <label><input type="checkbox" id="show" checked> List matrices as found</label>
 </div>
 <div class="row">
 <button id="go">Start</button><button id="stop" class="alt" disabled>Stop</button>
 <progress id="pg" value="0" max="1"></progress>
 </div>
-<p class="note" style="margin:10px 0 0">Large N or a large max digit can take a very long time. Lower the max digit first. The exact entry sum filter is always applied, even with pruning skipped.</p>
+<p class="note" style="margin:10px 0 0">Large N leads to slow runtimes.</p>
 </div>
 
 <div class="card stats">
@@ -138,12 +136,6 @@ function process(a) {
   }
   if (!sk && lonelyTowers(a)) return;
   if (c.oni && !sk && !colParityOk(a)) return;
-  if (c.fcs && !sk) {
-    let tot = 0; for (let i = 0; i < N * N; i++) tot += a[i];
-    if (tot !== N + 2) return;
-    let s = 0; for (let i = 1; i <= N; i++) s += a[i * N - 1];
-    if (s !== 3) return;
-  }
   if (!sk && (isNaN(ev) || ev < c.lo || ev > c.hi)) { waste++; return; }
   inc++;
   if (c.show && mats.length < 3000) mats.push(ev.toFixed(10) + " with array [" + Array.from(a).join(", ") + "]");
@@ -161,7 +153,6 @@ function search(a, pos) {
     }
     if (!sk) {
       if (tot > c.vmax) continue;
-      if (c.np2 && tot > N + 2) continue;
     }
     if (pos === NN - 1 && !sk) {
       let mn = NN * c.md, mx = -1;
@@ -249,7 +240,7 @@ $("go").onclick = () => {
     N: Math.max(2, +$("N").value | 0), md: Math.max(1, +$("md").value | 0),
     lo: +$("lo").value, hi: +$("hi").value, sums,
     skip: $("skip").checked, nab: $("nab").checked, oni: $("oni").checked,
-    fcs: $("fcs").checked, np2: $("np2").checked, show: $("show").checked
+    show: $("show").checked
   };
   const total = Math.pow(cfg.md + 1, cfg.N);
   if (!Number.isSafeInteger(total)) { alert("(Max Digit + 1)^N is too large to index. Lower N or Max Digit."); return; }
